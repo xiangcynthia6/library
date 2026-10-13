@@ -42,7 +42,7 @@ async function refresh(){
  }catch(e){$('#connection').textContent='同步失败';toast('未能刷新：'+fail(e));}
  finally{loading=false;if(queued){queued=false;setTimeout(refresh,200);}}
 }
-function openEditor(r){if(!storageOK){toast('请先允许浏览器本地存储，否则无法保存编辑钥匙。');return;}if(live&&!client){toast('请先完成数据库配置。');return;}editing=r?{...r}:null;$('#resourceForm').reset();for(const f of fields)$('#resourceForm').elements[f].value=r?.[f]||'';$('#editorTitle').textContent=r?'编辑资源':'分享一份好资源';$('#saveResource').textContent=r?'保存修改':'提交资源';$('#formError').textContent='';$('#editor').showModal();}
+function openEditor(r){if(!storageOK){toast('请先允许浏览器本地存储，否则无法保存编辑钥匙。');return;}if(live&&!client){toast('请先完成数据库配置。');return;}editing=r?{...r}:null;$('#resourceForm').reset();$('#smartShareText').value='';$('#smartPasteStatus').textContent='自动识别链接、提取码及资源名称';for(const f of fields)$('#resourceForm').elements[f].value=r?.[f]||'';$('#editorTitle').textContent=r?'编辑资源':'分享一份好资源';$('#saveResource').textContent=r?'保存修改':'提交资源';$('#formError').textContent='';$('#editor').showModal();}
 function showKey(id){const base='https://xiangcynthia6.github.io/library/library/index.html';$('#keyLink').value=base+'#edit='+id+'&key='+keyFor(id);$('#keyDialog').showModal();}
 async function importHash(){
  const p=new URLSearchParams(location.hash.slice(1));const id=p.get('edit'),token=p.get('key');if(!id||!token)return;
@@ -51,6 +51,77 @@ async function importHash(){
  try{if(live){if(!client)throw Error('请先完成数据库配置');if(!await rpc('resource_verify',{p_id:id,p_token:token}))throw Error('编辑钥匙无效或资源已删除');}
  else if(!rows.some(r=>r.id===id)||keyFor(id)!==token)throw Error('体验模式的编辑链接不能跨设备使用');
  saveKey(id,token);render();const r=rows.find(r=>r.id===id);if(r)openEditor(r);else toast('钥匙已保存，请刷新资源列表');}catch(e){toast(fail(e));}
+}
+// 智能解析网盘分享文案；只填入可信 URL，避免把附带文字作为链接保存。
+function parseShareText(text){
+ const result={};
+ const urlPattern=/https?:\/\/[^\s<>"'“”‘’。，；;、）)\]】]+/gi;
+ const matches=[...text.matchAll(urlPattern)];
+ for(let i=0;i<matches.length;i++){
+  const match=matches[i],url=match[0].replace(/[.,!?，。！？；;：:]+$/g,'');
+  if(!validURL(url))continue;
+  let parsedUrl;try{parsedUrl=new URL(url);}catch{continue;}
+  const host=parsedUrl.hostname.toLowerCase();
+  const kind=host==='pan.quark.cn'?'quark':host==='pan.baidu.com'?'baidu':'other';
+  if(result[kind])continue;
+  result[kind]=url;
+  if(kind==='other')continue;
+  // 百度链接自带 ?pwd=xxxx 时，优先采用链接自身的提取码。
+  // 不要让相邻的其他分享文本覆盖 URL 自带的密码。
+  const embedded=parsedUrl.searchParams.get('pwd')||parsedUrl.searchParams.get('password');
+  const after=text.slice(match.index+match[0].length,Math.min(text.length,match.index+match[0].length+160));
+  const before=text.slice(Math.max(0,match.index-130),match.index);
+  const codePattern=/(?:提取码|访问码|提取密码|访问密码|密码|code|pwd)\s*[：:=是为\s]*([a-zA-Z0-9]{4,12})/i;
+  const afterCode=after.match(codePattern);
+  const beforeCode=before.match(/(?:提取码|访问码|提取密码|访问密码|密码|code|pwd)\s*[：:=是为\s]*([a-zA-Z0-9]{4,12})\s*$/i);
+  const code=embedded||afterCode?.[1]||beforeCode?.[1];
+  if(code)result[kind+'_code']=code;
+ }
+ // 文件名称：优先明确字段，其次匹配夸克「分享了《标题》」和其他成对书名号。
+ const named=text.match(/(?:分享的文件|分享文件|文件名称|文件名|资源名称|资源名|文件)[：:]\s*([^\r\n]+)/i);
+ if(named){
+  const candidate=named[1].replace(/(?:\s*链接[：:].*)$/,'').trim();
+  if(candidate&&candidate.length<=120)result.name=candidate;
+ }
+ if(!result.name){
+  // 夸克文案：我用夸克网盘给你分享了「《笼中雀》作者：...」
+  // 只取内层书名号内容，不把「、作者信息或分享口令当成名称。
+  const book=text.match(/《\s*([^《》\r\n]{1,120}?)\s*》/);
+  if(book)result.name=book[1].trim();
+ }
+ if(!result.name){
+  const quoted=[...text.matchAll(/[「【“]([^「」【】“”\r\n]{2,120})[」】”]/g)]
+   .map(m=>m[1].trim())
+   .filter(t=>!/(?:超级会员|会员|百度网盘APP|夸克网盘APP|复制这段内容|点击链接)/i.test(t));
+  if(quoted.length)result.name=quoted[0];
+ }
+
+ return result;
+}
+function applyShareText(){
+ const text=$('#smartShareText').value.trim(),status=$('#smartPasteStatus');
+ if(!text){status.textContent='请先粘贴分享文字';return;}
+ const parsed=parseShareText(text),form=$('#resourceForm');
+ const found=['quark','baidu','other'].filter(k=>parsed[k]);
+ if(!found.length){status.textContent='未找到有效的 http/https 链接，请检查粘贴内容';return;}
+ for(const k of found){form.elements[k].value=parsed[k];if(parsed[k+'_code'])form.elements[k+'_code'].value=parsed[k+'_code'];}
+ if(parsed.name&&!form.elements.name.value.trim())form.elements.name.value=parsed.name;
+ status.textContent='已识别 '+found.map(k=>({quark:'夸克',baidu:'百度',other:'其他'})[k]).join('、')+'链接'+(found.some(k=>parsed[k+'_code'])?'及提取码':'')+' ✓';
+ $('#formError').textContent='';
+}
+$('#smartParse').addEventListener('click',applyShareText);
+let smartPasteDebounce;
+$('#smartShareText').addEventListener('input',()=>{clearTimeout(smartPasteDebounce);smartPasteDebounce=setTimeout(applyShareText,250);});
+// 兼容用户直接粘贴到旧的链接输入框；也支持纯链接。
+for(const k of ['quark','baidu','other']){
+ const input=$('#resourceForm').elements[k];
+ input.addEventListener('paste',e=>{
+  const pasted=e.clipboardData?.getData('text/plain')||'';
+  if(!pasted||(!/\s/.test(pasted)&&validURL(pasted)))return;
+  const parsed=parseShareText(pasted);
+  if(!Object.keys(parsed).some(x=>['quark','baidu','other'].includes(x)))return;
+  e.preventDefault();$('#smartShareText').value=pasted;applyShareText();
+ });
 }
 $('#resourceForm').addEventListener('submit',async e=>{
  e.preventDefault();if(busy)return;const data={};for(const f of fields)data[f]=$('#resourceForm').elements[f].value.trim();

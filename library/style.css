@@ -25,3 +25,6 @@ header,main,footer{position:relative;z-index:1}.logo{background:linear-gradient(
 @media(max-width:850px){#sakuraTree{width:660px;right:-220px;top:60px;opacity:.52}}
 @media(max-width:560px){#sakuraTree{width:520px;right:-225px;top:65px;opacity:.42}}
 @media(prefers-reduced-motion:reduce){#sakuraTree img{animation:none}.petal{animation:none;display:none}}
+
+/* 智能粘贴 */
+.smart-paste{background:linear-gradient(135deg,#f9f0fc,#fff8fc);border:1px solid #e9d8f1;border-radius:12px;padding:13px 14px;margin:17px 0 18px}.smart-paste label{margin:0;color:#8666a2;font-size:13px}.smart-paste .optional{color:#b09bbd;font-size:11px;font-weight:400}.smart-paste textarea{min-height:100px;line-height:1.7;background:#fffefd}.smart-paste-actions{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:9px}.smart-paste-actions span{font-size:11px;color:#967da8;line-height:1.5}.smart-paste-actions button{flex-shrink:0;font-size:11px;padding:8px 11px}@media(max-width:560px){.smart-paste{padding:11px}.smart-paste-actions{align-items:flex-start}.smart-paste-actions span{max-width:65%}}

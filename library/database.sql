@@ -1,4 +1,4 @@
--- 拾光资源库 v1。整段粘贴到新 Supabase 项目的 SQL Editor，点击 Run。
+-- 狭间图书馆 v1。整段粘贴到新 Supabase 项目的 SQL Editor，点击 Run。
 -- 可重复运行；不会清空已有资源。不需要开启匿名登录。
 begin;
 create schema if not exists resource_private;

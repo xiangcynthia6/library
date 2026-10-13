@@ -43,7 +43,7 @@ async function refresh(){
  finally{loading=false;if(queued){queued=false;setTimeout(refresh,200);}}
 }
 function openEditor(r){if(!storageOK){toast('请先允许浏览器本地存储，否则无法保存编辑钥匙。');return;}if(live&&!client){toast('请先完成数据库配置。');return;}editing=r?{...r}:null;$('#resourceForm').reset();for(const f of fields)$('#resourceForm').elements[f].value=r?.[f]||'';$('#editorTitle').textContent=r?'编辑资源':'分享一份好资源';$('#saveResource').textContent=r?'保存修改':'提交资源';$('#formError').textContent='';$('#editor').showModal();}
-function showKey(id){const base=location.href.split('#')[0].split('?')[0];$('#keyLink').value=base+'#edit='+id+'&key='+keyFor(id);$('#keyDialog').showModal();}
+function showKey(id){const base='https://xiangcynthia6.github.io/library/library/index.html';$('#keyLink').value=base+'#edit='+id+'&key='+keyFor(id);$('#keyDialog').showModal();}
 async function importHash(){
  const p=new URLSearchParams(location.hash.slice(1));const id=p.get('edit'),token=p.get('key');if(!id||!token)return;
  try{history.replaceState(null,'',location.pathname+location.search);}catch{location.hash='';}
@@ -76,21 +76,43 @@ $('#list').addEventListener('click',async e=>{const b=e.target.closest('button[d
 });
 $('#filters').addEventListener('click',e=>{const b=e.target.closest('[data-filter]');if(!b)return;filter=b.dataset.filter;page=1;document.querySelectorAll('[data-filter]').forEach(x=>x.classList.toggle('active',x===b));render();});
 $('#search').addEventListener('input',()=>{page=1;render();});$('#sort').addEventListener('change',()=>{page=1;render();});$('#loadMore').onclick=()=>{page++;render();};
-$('#add').onclick=()=>openEditor();$('#refresh').onclick=refresh;$('#helpOpen').onclick=()=>$('#help').showModal();$('#setupOpen').onclick=()=>{$('#configUrl').value=config.url||'';$('#configKey').value=config.key||'';$('#configTitle').value=config.title||'拾光资源库';$('#setup').showModal();};
+$('#add').onclick=()=>openEditor();$('#refresh').onclick=refresh;$('#helpOpen').onclick=()=>$('#help').showModal();$('#setupOpen').onclick=()=>{$('#configUrl').value=config.url||'';$('#configKey').value=config.key||'';$('#configTitle').value=config.title||'狭间图书馆';$('#setup').showModal();};
 document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>{if(b.dataset.close==='editor'&&busy)return;$('#'+b.dataset.close).close();});$('#editor').addEventListener('cancel',e=>{if(busy)e.preventDefault();});
 $('#copyKey').onclick=()=>copy($('#keyLink').value).catch(e=>toast(fail(e)));
 $('#backup').onclick=()=>{if(!Object.keys(keys).length){toast('还没有需要备份的编辑钥匙');return;}download('我的资源编辑钥匙_请勿分享.json',JSON.stringify({format:'shiguang-keys-v1',project:live?config.url:'demo',keys},null,2));};
 $('#restore').onclick=()=>$('#restoreFile').click();$('#restoreFile').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{if(f.size>1000000)throw Error('文件过大');const data=JSON.parse(await f.text());if(data.format!=='shiguang-keys-v1'||data.project!==(live?config.url:'demo')||!data.keys||typeof data.keys!=='object')throw Error('这不是当前资源库的钥匙备份');let restored=0;for(const [id,token] of Object.entries(data.keys)){if(!/^[a-f0-9-]{36}$/.test(id)||typeof token!=='string'||!/^[a-f0-9]{64}$/.test(token))continue;if(live&&!await rpc('resource_verify',{p_id:id,p_token:token}))continue;saveKey(id,token);restored++;}render();toast(`已恢复 ${restored} 把钥匙`);}catch(err){toast(fail(err));}e.target.value='';};
-function readConfig(){const url=$('#configUrl').value.trim().replace(/\/+$/,'');const key=$('#configKey').value.trim();if(!/^https:\/\/[a-z0-9-]+\.supabase\.co$/.test(url))throw Error('Project URL 应类似 https://xxxxxxxx.supabase.co');let payload;try{payload=JSON.parse(atob(key.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));}catch{throw Error('请复制 Legacy API Keys 中的 anon（public）key。');}if(payload.role!=='anon')throw Error('只能填写公开 anon key，禁止使用管理密钥。');return {url,key,title:$('#configTitle').value.trim()||'拾光资源库'};}
+function readConfig(){const url=$('#configUrl').value.trim().replace(/\/+$/,'');const key=$('#configKey').value.trim();if(!/^https:\/\/[a-z0-9-]+\.supabase\.co$/.test(url))throw Error('Project URL 应类似 https://xxxxxxxx.supabase.co');let payload;try{payload=JSON.parse(atob(key.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));}catch{throw Error('请复制 Legacy API Keys 中的 anon（public）key。');}if(payload.role!=='anon')throw Error('只能填写公开 anon key，禁止使用管理密钥。');return {url,key,title:$('#configTitle').value.trim()||'狭间图书馆',publicUrl:'https://xiangcynthia6.github.io/library/library/index.html'};}
 async function testConfiguration(){const c=readConfig();const temp=window.supabase.createClient(c.url,c.key,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}});const {error}=await temp.from('resources').select('id').limit(1);if(error)throw Error('无法读取资源表：请确认 database.sql 已运行，以及 URL、anon key 是否来自同一项目。');const check=await temp.rpc('resource_verify',{p_id:'00000000-0000-0000-0000-000000000000',p_token:'0'.repeat(64)});if(check.error||check.data!==false)throw Error('权限函数检测失败，请重新运行完整 database.sql。');testedConfig=JSON.stringify(c);$('#configResult').textContent='✓ 连接与权限函数检测通过。下载 config.js，替换原文件并上传 GitHub。';return c;}
 $('#testConfig').onclick=async()=>{$('#testConfig').disabled=true;$('#configResult').textContent='正在检测…';try{await testConfiguration();}catch(e){testedConfig='';$('#configResult').textContent=fail(e);}finally{$('#testConfig').disabled=false;}};
 $('#downloadConfig').onclick=async()=>{$('#downloadConfig').disabled=true;try{const c=readConfig();if(testedConfig!==JSON.stringify(c))await testConfiguration();download('config.js','window.RESOURCE_CONFIG = '+JSON.stringify(c,null,2)+';\n','text/javascript');}catch(e){$('#configResult').textContent=fail(e);}finally{$('#downloadConfig').disabled=false;}};
 window.addEventListener('storage',e=>{if(e.key?.startsWith(namespace)){keys=read(':keys',{});refresh();}});window.addEventListener('hashchange',importHash);document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh();});
 (async()=>{
  try{store(':storage-test',true);}catch{storageOK=false;}
- keys=read(':keys',{});document.title=config.title||'拾光资源库';$('#brandTitle').textContent=document.title;
+ keys=read(':keys',{});document.title=config.title||'狭间图书馆';$('#brandTitle').textContent=document.title;
  $('#modeBanner').textContent=live?'公开资源库 · 新内容自动同步。分享普通网址给朋友，编辑链接请自己保存。':'本机体验模式 · 你可以试用提交、编辑、搜索；数据仅保存在当前浏览器，还不会共享给其他人。点击右上角“首次配置”连接数据库。';
  if(live){try{if(!window.supabase)throw Error('supabase.js 未加载，请确认完整上传了所有文件');client=window.supabase.createClient(config.url,config.key,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}});client.channel('resource-list').on('postgres_changes',{event:'*',schema:'public',table:'resources'},()=>{clearTimeout(syncTimer);syncTimer=setTimeout(refresh,200);}).subscribe(s=>{$('#connection').textContent=s==='SUBSCRIBED'?'实时连接':s==='CHANNEL_ERROR'||s==='TIMED_OUT'?'定时同步 · 15秒':'正在连接';});}catch(e){toast(fail(e));$('#modeBanner').textContent='配置或连接失败：'+fail(e);}}
  else $('#connection').textContent='本机体验';
  await refresh();await importHash();if(live)setInterval(()=>{if(!document.hidden)refresh();},15000);
+})();
+
+// 花瓣由树冠位置出发；背景树使用独立 SVG 枝干动画。
+(()=>{
+ const layer=document.querySelector('#sakura'),toggle=document.querySelector('#petalToggle'),tree=document.querySelector('#sakuraTree');
+ const motion=window.matchMedia?.('(prefers-reduced-motion: reduce)');
+ let enabled=!motion?.matches;
+ try{const pref=localStorage.getItem('hazama:petals');if(pref!==null)enabled=pref==='on'&&!motion?.matches;}catch{}
+ const crowns=[[150,345,98,61],[215,258,107,75],[288,198,104,69],[468,160,105,70],[530,250,116,74],[613,320,106,67],[375,115,102,56],[367,233,126,74],[437,360,100,61]];
+ const petals=[];
+ for(let i=0;i<26;i++){
+  const node=document.createElement('i');node.className='petal';
+  const c=crowns[i%crowns.length],a=Math.random()*Math.PI*2,r=Math.sqrt(Math.random());
+  petals.push({node,x:c[0]+Math.cos(a)*c[2]*r,y:c[1]+Math.sin(a)*c[3]*r});
+  node.style.cssText=`--size:${7+Math.random()*7}px;--duration:${14+Math.random()*14}s;--delay:-${Math.random()*35}s;--rotation:${Math.random()*360}deg;--drift:${-100-Math.random()*300}px;`;
+  layer.append(node);
+ }
+ function place(){const box=tree.getBoundingClientRect();for(const p of petals){p.node.style.left=(box.left+p.x/760*box.width)+'px';p.node.style.top=(box.top+p.y/900*box.height)+'px';}}
+ function show(){layer.hidden=!enabled;toggle.textContent=enabled?'飘花：开':'飘花：关';toggle.setAttribute('aria-pressed',String(enabled));}
+ toggle.onclick=()=>{enabled=!enabled;try{localStorage.setItem('hazama:petals',enabled?'on':'off');}catch{}show();};
+ motion?.addEventListener?.('change',e=>{if(e.matches){enabled=false;show();}});
+ window.addEventListener('resize',place);place();show();
 })();

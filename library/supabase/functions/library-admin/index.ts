@@ -3,12 +3,13 @@ import { createClient } from 'npm:@supabase/supabase-js@2.49.8';
 const url=Deno.env.get('SUPABASE_URL')!;
 const anon=Deno.env.get('SUPABASE_ANON_KEY')!;
 const secret=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const allowedOrigin=Deno.env.get('ALLOWED_ORIGIN')||'https://xiangcynthia6.github.io';
+const allowedOrigins=(Deno.env.get('ALLOWED_ORIGINS')||Deno.env.get('ALLOWED_ORIGIN')||'https://xiangcynthia6.github.io').split(',').map(s=>s.trim()).filter(Boolean);
 Deno.serve(async(req:Request)=>{
  const origin=req.headers.get('Origin');
+ const allowedOrigin=origin&&allowedOrigins.includes(origin)?origin:allowedOrigins[0];
  const headers={'Content-Type':'application/json','Access-Control-Allow-Origin':allowedOrigin,'Access-Control-Allow-Headers':'authorization, x-client-info, apikey, content-type','Access-Control-Allow-Methods':'POST, OPTIONS','Vary':'Origin','Cache-Control':'no-store'};
  const reply=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status,headers});
- if(origin&&origin!==allowedOrigin)return reply({error:'来源不允许'},403);
+ if(origin&&!allowedOrigins.includes(origin))return reply({error:'来源不允许'},403);
  if(req.method==='OPTIONS')return new Response(null,{status:204,headers});
  if(req.method!=='POST')return reply({error:'仅支持 POST'},405);
  try{

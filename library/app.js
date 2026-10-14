@@ -1,9 +1,11 @@
 'use strict';
 const $ = s => document.querySelector(s);
-const fields = ['name','quark','baidu','other','quark_code','baidu_code','notes'];
+const fields = ['name','quark','baidu','other','quark_code','baidu_code','notes','category'];
 const config = window.RESOURCE_CONFIG || {};
 const live = !!(config.url && config.key);
 let currentUser = null, isAdmin = false;
+const contentCategories=['文学阅读', '影视动漫', '学习', '绘画设计', '兴趣手作', '软件工具', '游戏相关'];
+let contentFilter='all',mineOnly=false,categoryEditing=null,categoryBusy=false;
 let client, rows = [], filter = 'all', page = 1, editing = null, busy = false, loading = false, queued = false, syncTimer, testedConfig = '';
 function escapeHTML(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function validURL(s){try{const u=new URL(s);return ['http:','https:'].includes(u.protocol)&&!!u.hostname&&!u.username&&!u.password&&!/\s/.test(s);}catch{return false;}}
@@ -17,7 +19,7 @@ function date(s){return new Date(s).toLocaleDateString('zh-CN',{year:'numeric',m
 function render(){
  $('#count').textContent=rows.length;
  const q=$('#search').value.trim().toLocaleLowerCase();
- let items=rows.filter(r=>(filter==='all'||(filter==='mine'?mine(r):!!r[filter]))&&(`${r.name} ${r.notes}`).toLocaleLowerCase().includes(q));
+ let items=rows.filter(r=>(filter==='all'||!!r[filter])&&(contentFilter==='all'||(r.category||'待分类')===contentFilter)&&(!mineOnly||mine(r))&&(`${r.name} ${r.notes}`).toLocaleLowerCase().includes(q));
  const sort=$('#sort').value;items.sort((a,b)=>sort==='name'?a.name.localeCompare(b.name,'zh-CN'):sort==='old'?a.created_at.localeCompare(b.created_at):b.created_at.localeCompare(a.created_at));
  $('#resultCount').textContent=`${items.length} 份资源`;
  $('#loadMore').hidden=items.length<=page*18;
@@ -25,7 +27,7 @@ function render(){
  $('#list').innerHTML=items.slice(0,page*18).map(r=>{
  const owned=mine(r);
  const links=[['quark','夸克网盘'],['baidu','百度网盘'],['other','其他链接']].filter(([k])=>r[k]&&validURL(r[k]));
- return `<article class="card"><div class="card-top"><span class="file-icon">▤</span>${owned?'<span class="mine-badge">我分享的</span>':''}</div><h3>${escapeHTML(r.name)}</h3><p class="description">${escapeHTML(r.notes||'暂无备注，打开链接查看内容。')}</p><div class="links">${links.map(([k,label])=>`<a class="link-button ${k}" href="${escapeHTML(r[k])}" target="_blank" rel="noopener noreferrer">${label} ↗</a><button class="copy-small" data-action="copy-${k}" data-id="${r.id}" aria-label="复制${label}链接">复制</button>`).join('')}</div>${['quark','baidu'].filter(k=>r[k]&&r[k+'_code']).map(k=>`<div class="code">${k==='quark'?'夸克':'百度'}提取码：${escapeHTML(r[k+'_code'])}<button class="copy-small" data-action="code-${k}" data-id="${r.id}">复制</button></div>`).join('')}<div class="card-footer"><span class="date">${date(r.created_at)} 分享${r.version>1?' · 已更新':''}</span>${owned?`<div class="actions"><button data-action="edit" data-id="${r.id}">编辑</button><button class="danger" data-action="delete" data-id="${r.id}">删除</button></div>`:isAdmin?`<div class="actions"><button class="danger" data-action="delete" data-id="${r.id}">管理员删除</button></div>`:'<span class="date">公开分享</span>'}</div></article>`;
+ return `<article class="card"><div class="card-top"><span class="file-icon">▤</span>${owned?'<span class="mine-badge">我分享的</span>':''}</div><div class="category-line"><span class="category-badge">${escapeHTML(r.category||'待分类')}</span>${isAdmin?`<button class="copy-small" data-action="category" data-id="${r.id}">调整分类</button>`:''}</div><h3>${escapeHTML(r.name)}</h3><p class="description">${escapeHTML(r.notes||'暂无备注，打开链接查看内容。')}</p><div class="links">${links.map(([k,label])=>`<a class="link-button ${k}" href="${escapeHTML(r[k])}" target="_blank" rel="noopener noreferrer">${label} ↗</a><button class="copy-small" data-action="copy-${k}" data-id="${r.id}" aria-label="复制${label}链接">复制</button>`).join('')}</div>${['quark','baidu'].filter(k=>r[k]&&r[k+'_code']).map(k=>`<div class="code">${k==='quark'?'夸克':'百度'}提取码：${escapeHTML(r[k+'_code'])}<button class="copy-small" data-action="code-${k}" data-id="${r.id}">复制</button></div>`).join('')}<div class="card-footer"><span class="date">${date(r.created_at)} 分享${r.version>1?' · 已更新':''}</span>${owned?`<div class="actions"><button data-action="edit" data-id="${r.id}">编辑</button><button class="danger" data-action="delete" data-id="${r.id}">删除</button></div>`:isAdmin?`<div class="actions"><button class="danger" data-action="delete" data-id="${r.id}">管理员删除</button></div>`:'<span class="date">公开分享</span>'}</div></article>`;
  }).join('');
 }
 async function refresh(){
@@ -116,6 +118,7 @@ for(const k of ['quark','baidu','other']){
 }
 $('#resourceForm').addEventListener('submit',async e=>{
  e.preventDefault();if(busy)return;const data={};for(const f of fields)data[f]=$('#resourceForm').elements[f].value.trim();
+ if(!contentCategories.includes(data.category)){$('#formError').textContent='请选择内容分类';return;}
  if(!data.name){$('#formError').textContent='请填写资源名称';return;}
  if(!['quark','baidu','other'].some(k=>data[k])){$('#formError').textContent='请至少填写一个链接';return;}
  if(['quark','baidu','other'].some(k=>data[k]&&!validURL(data[k]))){$('#formError').textContent='请填写完整的 http:// 或 https:// 链接，不要附带提取码文字';return;}
@@ -130,23 +133,28 @@ $('#resourceForm').addEventListener('submit',async e=>{
  finally{busy=false;$('#saveResource').disabled=false;}
 });
 $('#list').addEventListener('click',async e=>{const b=e.target.closest('button[data-action]');if(!b)return;const r=rows.find(x=>x.id===b.dataset.id);if(!r)return;const action=b.dataset.action;
- try{if(action.startsWith('copy-'))await copy(r[action.slice(5)]);else if(action.startsWith('code-'))await copy(r[action.slice(5)+'_code']);else if(action==='edit')openEditor(r);else if(action==='delete'){
+ try{if(action.startsWith('copy-'))await copy(r[action.slice(5)]);else if(action.startsWith('code-'))await copy(r[action.slice(5)+'_code']);else if(action==='category'){if(!isAdmin)throw Error('只有管理员可以调整分类');categoryEditing={...r};$('#categoryResourceName').textContent=r.name;$('#adminCategory').value=r.category||'待分类';$('#categoryError').textContent='';$('#categoryDialog').showModal();}else if(action==='edit')openEditor(r);else if(action==='delete'){
  if(!await window.HazamaNotices.confirmDelete(r,isAdmin&&!mine(r)))return;b.disabled=true;
  await rpc('hazama_delete_with_notice',{p_id:r.id,p_version:r.version,p_reason:window.HazamaNotices.deleteReason});
  await refresh();toast('资源已删除');}}
  catch(err){toast(fail(err));b.disabled=false;}
 });
-$('#filters').addEventListener('click',e=>{const b=e.target.closest('[data-filter]');if(!b)return;filter=b.dataset.filter;page=1;document.querySelectorAll('[data-filter]').forEach(x=>x.classList.toggle('active',x===b));render();});
+$('#filters').addEventListener('click',e=>{const b=e.target.closest('[data-filter]');if(!b)return;filter=b.dataset.filter;page=1;document.querySelectorAll('[data-filter]').forEach(x=>{x.classList.toggle('active',x===b);x.setAttribute('aria-pressed',String(x===b));});render();});
+$('#categoryFilters').addEventListener('click',e=>{const b=e.target.closest('[data-category]');if(!b)return;contentFilter=b.dataset.category;page=1;document.querySelectorAll('[data-category]').forEach(x=>{x.classList.toggle('active',x===b);x.setAttribute('aria-pressed',String(x===b));});render();});
+$('#mineOnly').onchange=()=>{mineOnly=$('#mineOnly').checked;page=1;render();};
+$('#categoryForm').onsubmit=async e=>{e.preventDefault();if(categoryBusy||!categoryEditing)return;categoryBusy=true;$('#categorySave').disabled=true;$('#categoryError').textContent='';try{if(!isAdmin)throw Error('管理员权限已失效');await rpc('hazama_set_category',{p_id:categoryEditing.id,p_version:categoryEditing.version,p_category:$('#adminCategory').value});$('#categoryDialog').close();await refresh();toast('分类已更新');}catch(err){$('#categoryError').textContent=fail(err);}finally{categoryBusy=false;$('#categorySave').disabled=false;}};
+$('#categoryDialog').addEventListener('cancel',e=>{if(categoryBusy)e.preventDefault();});
 $('#search').addEventListener('input',()=>{page=1;render();});$('#sort').addEventListener('change',()=>{page=1;render();});$('#loadMore').onclick=()=>{page++;render();};
 $('#add').onclick=()=>openEditor();$('#refresh').onclick=refresh;$('#helpOpen').onclick=()=>$('#help').showModal();$('#setupOpen').onclick=()=>{$('#configUrl').value=config.url||'';$('#configKey').value=config.key||'';$('#configTitle').value=config.title||'狭间图书馆';$('#setup').showModal();};
-document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>{if(b.dataset.close==='editor'&&busy)return;$('#'+b.dataset.close).close();});$('#editor').addEventListener('cancel',e=>{if(busy)e.preventDefault();});
+document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>{if((b.dataset.close==='editor'&&busy)||(b.dataset.close==='categoryDialog'&&categoryBusy))return;$('#'+b.dataset.close).close();});$('#editor').addEventListener('cancel',e=>{if(busy)e.preventDefault();});
 function readConfig(){const url=$('#configUrl').value.trim().replace(/\/+$/,'');const key=$('#configKey').value.trim();if(!/^https:\/\/[a-z0-9-]+\.supabase\.co$/.test(url))throw Error('Project URL 应类似 https://xxxxxxxx.supabase.co');let payload;try{payload=JSON.parse(atob(key.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));}catch{throw Error('请复制 Legacy API Keys 中的 anon（public）key。');}if(payload.role!=='anon')throw Error('只能填写公开 anon key，禁止使用管理密钥。');return {url,key,title:$('#configTitle').value.trim()||'狭间图书馆',publicUrl:'https://xiangcynthia6.github.io/library/library/index.html'};}
-async function testConfiguration(){const c=readConfig();const temp=window.supabase.createClient(c.url,c.key,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}});const {error}=await temp.from('resources').select('id').limit(1);if(error)throw Error('无法读取资源表：请确认 database.sql 已运行，以及 URL、anon key 是否来自同一项目。');const check=await temp.rpc('hazama_version');if(check.error||check.data!==7)throw Error('权限函数检测失败，请重新运行完整 database.sql。');testedConfig=JSON.stringify(c);$('#configResult').textContent='✓ 连接与权限函数检测通过。下载 config.js，替换原文件并上传 GitHub。';return c;}
+async function testConfiguration(){const c=readConfig();const temp=window.supabase.createClient(c.url,c.key,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}});const {error}=await temp.from('resources').select('id').limit(1);if(error)throw Error('无法读取资源表：请确认 database.sql 已运行，以及 URL、anon key 是否来自同一项目。');const check=await temp.rpc('hazama_version');if(check.error||check.data!==8)throw Error('权限函数检测失败，请重新运行完整 database.sql。');testedConfig=JSON.stringify(c);$('#configResult').textContent='✓ 连接与权限函数检测通过。下载 config.js，替换原文件并上传 GitHub。';return c;}
 $('#testConfig').onclick=async()=>{$('#testConfig').disabled=true;$('#configResult').textContent='正在检测…';try{await testConfiguration();}catch(e){testedConfig='';$('#configResult').textContent=fail(e);}finally{$('#testConfig').disabled=false;}};
 $('#downloadConfig').onclick=async()=>{$('#downloadConfig').disabled=true;try{const c=readConfig();if(testedConfig!==JSON.stringify(c))await testConfiguration();download('config.js','window.RESOURCE_CONFIG = '+JSON.stringify(c,null,2)+';\n','text/javascript');}catch(e){$('#configResult').textContent=fail(e);}finally{$('#downloadConfig').disabled=false;}};
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh();});
 window.addEventListener('hazama-auth',e=>{
  const changed=currentUser?.id!==e.detail.user?.id;currentUser=e.detail.user;isAdmin=e.detail.admin;
+ if(changed||!isAdmin){$('#categoryDialog').close();categoryEditing=null;}
  if(changed&&$('#editor').open)$('#editor').close();render();
 });
 (async()=>{

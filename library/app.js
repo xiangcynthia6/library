@@ -131,8 +131,8 @@ $('#resourceForm').addEventListener('submit',async e=>{
 });
 $('#list').addEventListener('click',async e=>{const b=e.target.closest('button[data-action]');if(!b)return;const r=rows.find(x=>x.id===b.dataset.id);if(!r)return;const action=b.dataset.action;
  try{if(action.startsWith('copy-'))await copy(r[action.slice(5)]);else if(action.startsWith('code-'))await copy(r[action.slice(5)+'_code']);else if(action==='edit')openEditor(r);else if(action==='delete'){
- if(!confirm(`确定删除“${r.name}”？删除后无法撤销。`))return;b.disabled=true;
- await rpc('hazama_delete',{p_id:r.id,p_version:r.version});
+ if(!await window.HazamaNotices.confirmDelete(r,isAdmin&&!mine(r)))return;b.disabled=true;
+ await rpc('hazama_delete_with_notice',{p_id:r.id,p_version:r.version,p_reason:window.HazamaNotices.deleteReason});
  await refresh();toast('资源已删除');}}
  catch(err){toast(fail(err));b.disabled=false;}
 });
@@ -141,7 +141,7 @@ $('#search').addEventListener('input',()=>{page=1;render();});$('#sort').addEven
 $('#add').onclick=()=>openEditor();$('#refresh').onclick=refresh;$('#helpOpen').onclick=()=>$('#help').showModal();$('#setupOpen').onclick=()=>{$('#configUrl').value=config.url||'';$('#configKey').value=config.key||'';$('#configTitle').value=config.title||'狭间图书馆';$('#setup').showModal();};
 document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>{if(b.dataset.close==='editor'&&busy)return;$('#'+b.dataset.close).close();});$('#editor').addEventListener('cancel',e=>{if(busy)e.preventDefault();});
 function readConfig(){const url=$('#configUrl').value.trim().replace(/\/+$/,'');const key=$('#configKey').value.trim();if(!/^https:\/\/[a-z0-9-]+\.supabase\.co$/.test(url))throw Error('Project URL 应类似 https://xxxxxxxx.supabase.co');let payload;try{payload=JSON.parse(atob(key.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));}catch{throw Error('请复制 Legacy API Keys 中的 anon（public）key。');}if(payload.role!=='anon')throw Error('只能填写公开 anon key，禁止使用管理密钥。');return {url,key,title:$('#configTitle').value.trim()||'狭间图书馆',publicUrl:'https://xiangcynthia6.github.io/library/library/index.html'};}
-async function testConfiguration(){const c=readConfig();const temp=window.supabase.createClient(c.url,c.key,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}});const {error}=await temp.from('resources').select('id').limit(1);if(error)throw Error('无法读取资源表：请确认 database.sql 已运行，以及 URL、anon key 是否来自同一项目。');const check=await temp.rpc('hazama_version');if(check.error||check.data!==5)throw Error('权限函数检测失败，请重新运行完整 database.sql。');testedConfig=JSON.stringify(c);$('#configResult').textContent='✓ 连接与权限函数检测通过。下载 config.js，替换原文件并上传 GitHub。';return c;}
+async function testConfiguration(){const c=readConfig();const temp=window.supabase.createClient(c.url,c.key,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}});const {error}=await temp.from('resources').select('id').limit(1);if(error)throw Error('无法读取资源表：请确认 database.sql 已运行，以及 URL、anon key 是否来自同一项目。');const check=await temp.rpc('hazama_version');if(check.error||check.data!==7)throw Error('权限函数检测失败，请重新运行完整 database.sql。');testedConfig=JSON.stringify(c);$('#configResult').textContent='✓ 连接与权限函数检测通过。下载 config.js，替换原文件并上传 GitHub。';return c;}
 $('#testConfig').onclick=async()=>{$('#testConfig').disabled=true;$('#configResult').textContent='正在检测…';try{await testConfiguration();}catch(e){testedConfig='';$('#configResult').textContent=fail(e);}finally{$('#testConfig').disabled=false;}};
 $('#downloadConfig').onclick=async()=>{$('#downloadConfig').disabled=true;try{const c=readConfig();if(testedConfig!==JSON.stringify(c))await testConfiguration();download('config.js','window.RESOURCE_CONFIG = '+JSON.stringify(c,null,2)+';\n','text/javascript');}catch(e){$('#configResult').textContent=fail(e);}finally{$('#downloadConfig').disabled=false;}};
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh();});
@@ -156,6 +156,7 @@ window.addEventListener('hazama-auth',e=>{
  if(live){try{
  if(!window.supabase)throw Error('supabase.js 未加载，请完整上传文件');
  client=window.supabase.createClient(config.url,config.key,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
+ window.HazamaNotices.init(client);
  await window.HazamaAuth.init(client);
  client.channel('resource-list').on('postgres_changes',{event:'*',schema:'public',table:'resources'},()=>{clearTimeout(syncTimer);syncTimer=setTimeout(refresh,200);}).subscribe(s=>{$('#connection').textContent=s==='SUBSCRIBED'?'实时连接':s==='CHANNEL_ERROR'||s==='TIMED_OUT'?'定时同步 · 15秒':'正在连接';});
  }catch(e){toast(fail(e));$('#modeBanner').textContent='连接失败：'+fail(e);}}

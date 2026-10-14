@@ -1,4 +1,12 @@
-# 狭间图书馆 · 邮箱账号版 v5
+# 先看这里：如果你已部署上一版
+
+只需覆盖 index.html、auth.js、app.js、style.css（请一起上传，避免缓存混用）。
+数据库表和云函数与 v5 兼容：已运行 v5 database.sql、02-admin.sql 并部署 library-admin 的，无需重复部署。
+确认 Supabase 的 Confirm email 已关闭并保存。首次设置管理员与重置服务的步骤见下文。
+
+本次改的是注册方式和界面，不会修复访问 Supabase 的网络超时。网页必须能连接 Supabase 才能注册、登录和保存资源。请求失败时不会假装注册成功或把账号仅存在本机。
+
+# 狭间图书馆 · 简化账号版 v6
 
 保留原来的樱花界面、粉色飘花、智能识别网盘文案和现有配置。
 浏览不登录；注册／登录后分享资源。换手机或电脑，登录同一邮箱即可编辑自己的资源。
@@ -14,20 +22,16 @@
 此时旧资源暂时没有账号归属，仍然能看；第 4 步会交给你的账号。
 SQL 升级后旧网页不能继续用钥匙写入，应接着上传新网页。
 
-### 2. 开启邮箱账号
+### 2. 关闭邮箱确认（必须）
 
-在 Authentication 设置中找到 Email（通常在 Sign In / Providers），开启 Email 注册与登录，允许新用户注册。
-不要启用 Anonymous sign-ins。密码最少长度设置为 8 或更高（网页最低为 8）。
-推荐开启 Confirm email，并先按下文“配置邮件”完成 SMTP 和模板。
+Supabase → Authentication → Sign In / Providers → Email：
+- 开启 Email 注册登录，允许新用户注册。
+- 关闭 Confirm email，点击保存。
+- 密码最少长度设为 8；如需用 12345678 重置，不要设置必须包含字母、符号等冲突规则。
+- 不启用 Anonymous sign-ins。不需要配置 SMTP、邮件模板或验证码。
 
-如果现在只想先用“邮箱＋密码，忘记后找你人工重置”，可以暂时关闭 Confirm email；此时注册不发邮件，但邮箱尚未验证，不能仅凭对方说出的邮箱就重置。
-后续配置好 SMTP 后，再启用邮箱验证。关闭验证不会让找回密码自动免除 SMTP 配置。
-如果启用了 Secure password change，长时间未认证可能要求额外 reauthentication nonce。本版账号内改密会先用当前密码重新登录；如服务仍要求 nonce，请重新登录后重试，或走忘记密码流程。
-
-Authentication → URL Configuration：
-- Site URL 填你的正式网页地址，目前是 https://xiangcynthia6.github.io/library/library/index.html
-- Redirect URLs 也添加这一完整地址。
-- 地址变了，同时修改 config.js 的 publicUrl；不要用 file:/// 本地地址。
+邮箱在本版中是登录账号，没有验证邮箱归属；人工重置时请通过你与本人已有的联系方式核实身份。
+以前开启验证时创建的待确认账号可能仍需管理员处理：请在 Supabase 的 Authentication → Users 检查该账号状态。不要删除已经绑定资源的账号。
 
 ### 3. 上传完整网页
 
@@ -40,7 +44,7 @@ Authentication → URL Configuration：
 
 ### 4. 设置你为管理员，并接管旧资源
 
-先在新网页注册你自己的邮箱。如果开启邮箱确认，请完成验证。
+先在新网页注册你自己的邮箱。请先完成第 2 步关闭邮箱确认。
 打开本包 02-admin.sql，把“请改成你自己注册的邮箱”改成你刚注册的邮箱。
 复制全部内容到 SQL Editor 运行。这个操作把所有尚无 owner_id 的旧资源交给你；已经有账号归属的资源不受影响。
 如果旧资源并非全由你管理，请先删去脚本里的 update 行，随后由你核实后在数据库逐条指定 owner_id。
@@ -73,22 +77,7 @@ supabase functions deploy library-admin --no-verify-jwt
 请先确认申请人身份，再私下把临时密码告诉本人，让对方登录“我的账号”修改。
 普通用户看不到此入口，即使自己构造请求，服务端也会拒绝。
 管理员不能查看用户原密码，也不会替未验证邮箱自动完成验证。
-如果用户邮箱未验证，重置后仍需要先完成邮箱验证；不要为了方便替陌生人验证邮箱。
-
-## 配置邮件：让用户自己找回密码
-
-Supabase 默认邮件服务只向项目团队授权的地址发送测试邮件，不能当成面向访客的正常邮件服务。
-正式向 QQ、网易、Gmail 等地址发验证码，需要配置自定义 SMTP。
-
-1. 选择支持 SMTP 的发信服务，取得 Host、Port、Username、Password、Sender email；按服务商要求验证发信域名及 SPF / DKIM 等记录。
-2. Supabase → Authentication → Email / SMTP Settings，开启 Custom SMTP，把服务商给你的信息填入，保存。密码是服务商的 SMTP 凭证，不是填到网页里的用户密码。
-3. Authentication → Email Templates → Reset password：将正文替换为 email-templates/reset-password.html 的内容，主题可填“狭间图书馆密码重置验证码”。
-4. Confirm signup：正文替换为 email-templates/confirm-signup.html，主题可填“狭间图书馆注册验证码”。保留 {{ .Token }} 原样，不能改成真实数字。
-5. 到邮件／Auth 限速设置中检查发信额度和发送间隔，建议保持服务端限速。网页重发最少等待 60 秒，实际服务端可设置更长；验证码有效期由 Supabase 配置决定。
-6. 用你自己控制的 QQ、163/126 和 Gmail 邮箱分别注册，退出，点击“忘记密码”，确认能收码、设置新密码、登录后管理原资源。
-
-代码支持这些邮箱地址，但邮箱服务商可能拒收、延迟或放进垃圾箱；无法承诺任何提供商 100% 送达。邮件服务可能有自己的免费额度或费用，与静态网页无关。
-如果暂时不配 SMTP，先用邮箱密码账号和管理员人工重置即可（注册邮箱确认需要相应调整，见第 2 步）。
+旧版遗留待确认账号请先由项目主人核实归属并处理确认状态。
 
 ## 升级后检查
 
@@ -96,24 +85,22 @@ Supabase 默认邮件服务只向项目团队授权的地址发送测试邮件�
 - A 账号发布，刷新、退出重登后仍能编辑；另一台设备登录 A 也能编辑。
 - B 账号不能编辑／删除 A 的资源；相同密码也不会混淆归属，权限绑定账号 ID。
 - 旧钥匙链接不再赋予编辑权；旧本地钥匙备份不再需要。
-- A 忘记密码后通过邮件验证码设置新密码，资源归属不变。
+- A 忘记密码后由管理员重置为 12345678（或另设临时密码），A 登录后在“我的账号”填写当前密码与新密码，资源归属不变。
 - 只有你指定的管理员能列出账号并重置密码。
 - 旧资源运行 02-admin.sql 后归到你名下。
 - 管理入口报“服务未就绪”：检查函数名、部署、JWT 设置和管理员脚本。403 则检查管理员身份和允许的来源域名。
-- 注册收不到邮件：检查 SMTP、邮件模板、Auth 日志、服务商日志、垃圾箱及限速。
+- 注册提示需要邮箱确认：确认 Confirm email 已关闭并保存。
 - 新网页打开报权限函数失败：重新运行本包 database.sql；不要运行旧版 SQL。
 
 前端在浏览器保存登录会话以维持登录，不保存用户输入的明文密码。公共电脑使用后请退出登录。
-本版恢复链接兼容 Supabase 的 PASSWORD_RECOVERY 事件；推荐使用包内验证码模板，无需跨设备搬运编辑钥匙。
+本版没有验证码或邮件找回功能。默认临时密码只在管理员点击确认重置后生效，不是任何账号的通用登录密码。用户改密为手动操作，本版没有强制改密限制。
 
 ## 已验证与尚待现场验证
 
 本包提供可运行源码、SQL 和云函数；没有代替你操作远程 Supabase 或 GitHub。
-本地数据库权限和前端交互测试结果见 验证说明.txt。真实邮件送达与 Edge Functions 托管部署需配置后验证。
+本地数据库权限和前端交互测试结果见 验证说明.txt。真实注册登录与 Edge Functions 托管部署需配置后验证。
 
 官方参考：
 - https://supabase.com/docs/guides/auth/passwords
-- https://supabase.com/docs/guides/auth/auth-smtp
-- https://supabase.com/docs/guides/auth/auth-email-templates
 - https://supabase.com/docs/reference/javascript/auth-admin-updateuserbyid
 - https://supabase.com/docs/guides/functions/deploy

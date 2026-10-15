@@ -56,3 +56,5 @@ header,main,footer{position:relative;z-index:1}.logo{background:linear-gradient(
   margin: 0;
   min-width: 0;
 }
+
+.notice-actions{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-top:14px}#remindName{overflow-wrap:anywhere}#remindIssue{display:block;width:100%;padding:12px;border:1px solid var(--line);border-radius:9px;margin:8px 0 16px;background:white;color:var(--ink)}.category-line{flex-wrap:wrap;justify-content:flex-start}.category-filter-row,.filterbar.platform-filter-row{display:flex;flex-direction:row;justify-content:flex-start;align-items:flex-start;gap:14px}.category-filter-row .filter-label,.platform-filter-row .filter-label{flex:0 0 28px}.category-filter-row .filters,.platform-filter-row .filters{flex:1;justify-content:flex-start;margin:0;min-width:0}

@@ -1,3 +1,9 @@
+# v10 资源有效性检测版
+
+请先阅读 **先看这里-检测版安装.md**。本版增加 06-validity.sql、checker/check.py、仓库根目录/.github/workflows/check-resources.yml，并更新 index.html、app.js、style.css。
+
+下面是上一版说明，不能代替本版后台任务配置。
+
 # v9 站内提醒版：现有分类版升级两步
 
 1. Supabase → SQL Editor → New query，运行本包 `05-reminders.sql` 全部内容。

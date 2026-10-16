@@ -1,0 +1,32 @@
+name: 检测资源有效性
+on:
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 重新检测已有自动结果（手工核验结果保留）
+        type: boolean
+        default: false
+  schedule:
+    - cron: '23 3 * * *'
+permissions:
+  contents: read
+concurrency:
+  group: resource-validity
+  cancel-in-progress: false
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install playwright==1.55.0
+      - run: python -m playwright install --with-deps chromium
+      - name: 自动验证并保存
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          FORCE_CHECK: ${{ inputs.force }}
+        run: python library/checker/check.py

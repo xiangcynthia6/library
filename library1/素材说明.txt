@@ -1,3 +1,0 @@
-素材由内置图像生成工具生成并随项目打包。
-樱花树提示：photorealistic complete mature Japanese cherry blossom tree, full pale pink bloom, natural asymmetric branching, weathered bark, soft spring daylight, transparent background, no text.
-花瓣提示：single isolated pale pink cherry blossom petal, macro botanical photography, slight notch, subtle fine veins, gentle curl, translucent edges, transparent background.

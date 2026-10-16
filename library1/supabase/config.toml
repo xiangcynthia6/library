@@ -1,3 +1,0 @@
-[functions.library-admin]
-# 云函数内部通过 auth.getUser 校验 JWT，并在数据库校验管理员身份。
-verify_jwt = false
